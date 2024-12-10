@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Analysis Interface</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <h1>Welcome to the Data Analysis Tool</h1>
+    
+    <!-- Analysis Form -->
+    <div>
+        <label for="analysis-type">Select Analysis Type:</label>
+        <select id="analysis-type">
+            <option value="summary">Summary Statistics</option>
+            <option value="scatter_plot">Scatter Plot</option>
+            <option value="filter">Filter by Threshold</option>
+        </select>
+    </div>
+    
+    <!-- Parameters Section -->
+    <div id="parameters-section">
+        <!-- Scatter Plot Parameters -->
+        <div id="scatter-plot-params" style="display: none;">
+            <label for="x-column">X-axis Column:</label>
+            <select id="x-column"></select>
+            <label for="y-column">Y-axis Column:</label>
+            <select id="y-column"></select>
+        </div>
+
+        <!-- Filter Parameters -->
+        <div id="filter-params" style="display: none;">
+            <label for="filter-threshold">Threshold:</label>
+            <input type="number" id="filter-threshold">
+        </div>
+    </div>
+
+    <button id="submit-button">Run Analysis</button>
+
+    <!-- Results Section -->
+    <h2>Results:</h2>
+    <div id="results"></div>
+
+    <script>
+        // Load column names for dropdown menus
+        async function loadColumns() {
+            const response = await axios.get('/columns');
+            const columns = response.data;
+
+            // Populate dropdowns for scatter plot
+            const xColumnSelect = document.getElementById('x-column');
+            const yColumnSelect = document.getElementById('y-column');
+            columns.forEach(col => {
+                const optionX = document.createElement('option');
+                optionX.value = col;
+                optionX.textContent = col;
+                xColumnSelect.appendChild(optionX);
+
+                const optionY = document.createElement('option');
+                optionY.value = col;
+                optionY.textContent = col;
+                yColumnSelect.appendChild(optionY);
+            });
+        }
+        loadColumns();
+
+        // Show/hide parameters based on selected analysis
+        document.getElementById('analysis-type').addEventListener('change', (e) => {
+            const selected = e.target.value;
+            document.getElementById('scatter-plot-params').style.display = (selected === 'scatter_plot') ? 'block' : 'none';
+            document.getElementById('filter-params').style.display = (selected === 'filter') ? 'block' : 'none';
+        });
+
+        // Handle form submission
+        document.getElementById('submit-button').addEventListener('click', async () => {
+            const analysisType = document.getElementById('analysis-type').value;
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = ''; // Clear previous results
+
+            let requestData = { analysis_type: analysisType };
+
+            if (analysisType === 'scatter_plot') {
+                requestData.x_column = document.getElementById('x-column').value;
+                requestData.y_column = document.getElementById('y-column').value;
+            } else if (analysisType === 'filter') {
+                requestData.parameter = document.getElementById('filter-threshold').value;
+            }
+
+            try {
+                const response = await axios.post('/analyze', requestData);
+                if (analysisType === 'scatter_plot') {
+                    // Display scatter plot image
+                    const img = document.createElement('img');
+                    img.src = `data:image/png;base64,${response.data.image}`;
+                    resultsDiv.appendChild(img);
+                } else {
+                    // Display JSON result
+                    const pre = document.createElement('pre');
+                    pre.textContent = JSON.stringify(response.data, null, 2);
+                    resultsDiv.appendChild(pre);
+                }
+            } catch (error) {
+                resultsDiv.textContent = 'Error: ' + error.response.data.error;
+            }
+        });
+    </script>
+</body>
+</html>
