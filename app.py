@@ -65,13 +65,23 @@ def analyze():
             # Return the summary stats as JSON
             return jsonify(summary_stats_dict)
 
-        elif analysis_type == 'scatter_plot':
-            x_col = request_data.get('x_column')
-            y_col = request_data.get('y_column')
-            if x_col not in data.columns or y_col not in data.columns:
-                raise ValueError(f"Invalid columns: {x_col}, {y_col}")
-            image = generate_plot(data[x_col], data[y_col])
-            return jsonify({"image": image})
+        elif analysis_type == 'scatterplot':
+            # Get the x and y columns for the scatterplot
+            x_column = request_data.get('x_column')
+            y_column = request_data.get('y_column')
+
+            if x_column is None or y_column is None:
+                return jsonify({'error': 'Both x and y columns must be selected for the scatterplot'}), 400
+            
+            # Prepare scatterplot data
+            scatter_data = {
+                'x': data[x_column].tolist(),
+                'y': data[y_column].tolist(),
+                'x_label': x_column,
+                'y_label': y_column
+            }
+
+            return jsonify(scatter_data)
 
         else:
             return jsonify({"error": "Analysis type not implemented"}), 400

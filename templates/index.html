@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Data Analysis</title>
+    <!-- Include Plotly.js for rendering the scatterplot -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
 <body>
     <h1>Data Analysis</h1>
@@ -21,6 +23,18 @@
             <!-- This will be populated dynamically with column names -->
         </select>
         
+        <div id="scatterplot-options" style="display:none;">
+            <label for="x-column">Select X Column:</label>
+            <select id="x-column" name="x-column">
+                <!-- This will be populated dynamically -->
+            </select>
+
+            <label for="y-column">Select Y Column:</label>
+            <select id="y-column" name="y-column">
+                <!-- This will be populated dynamically -->
+            </select>
+        </div>
+        
         <button type="submit">Analyze</button>
     </form>
 
@@ -30,10 +44,12 @@
     <!-- Include the JavaScript file -->
     <script>
         window.onload = function() {
-            // Get column names from the Flask backend and populate the dropdown
+            // Get column names from the Flask backend and populate the dropdowns
             const columns = {{ columns | tojson }};  // This is passed from Flask to the frontend
 
             const columnSelect = document.getElementById('column');
+            const xColumnSelect = document.getElementById('x-column');
+            const yColumnSelect = document.getElementById('y-column');
             
             // Create option elements for each column and add them to the dropdown
             columns.forEach(function(column) {
@@ -41,6 +57,8 @@
                 option.value = column;
                 option.textContent = column;
                 columnSelect.appendChild(option);
+                xColumnSelect.appendChild(option.cloneNode(true));
+                yColumnSelect.appendChild(option.cloneNode(true));
             });
         };
 
@@ -48,13 +66,20 @@
             event.preventDefault();  // Prevent the default form submission behavior
 
             const analysisType = document.getElementById('analysis-type').value;
-            const column = document.getElementById('column').value;  // Get the selected column name
+            const column = document.getElementById('column').value;
+            const xColumn = document.getElementById('x-column').value;
+            const yColumn = document.getElementById('y-column').value;
 
             // Prepare the request data as an object
             const requestData = {
                 analysis_type: analysisType,
                 column: column
             };
+
+            if (analysisType === 'scatterplot') {
+                requestData.x_column = xColumn;
+                requestData.y_column = yColumn;
+            }
 
             // Send the POST request to the Flask server
             fetch('/analyze', {
@@ -81,8 +106,21 @@
                             resultDiv.innerHTML += `<p><strong>${stat}:</strong> ${data[stat]}</p>`;
                         }
                     } else if (analysisType === 'scatterplot') {
-                        // You can modify this to render a scatterplot
-                        resultDiv.innerHTML = '<p>Scatterplot will be rendered here.</p>';
+                        // Render the scatterplot using Plotly.js
+                        const trace = {
+                            x: data.x,
+                            y: data.y,
+                            mode: 'markers',
+                            type: 'scatter',
+                            name: `${data.x_label} vs ${data.y_label}`
+                        };
+                        const layout = {
+                            title: `${data.x_label} vs ${data.y_label}`,
+                            xaxis: { title: data.x_label },
+                            yaxis: { title: data.y_label }
+                        };
+                        const plotData = [trace];
+                        Plotly.newPlot('analysis-results', plotData, layout);
                     }
                 }
             })
@@ -90,6 +128,16 @@
                 console.error('Error:', error);
                 alert('There was an error processing your request.');
             });
+        });
+
+        // Show scatterplot-specific options when the scatterplot analysis type is selected
+        document.getElementById('analysis-type').addEventListener('change', function() {
+            const scatterplotOptions = document.getElementById('scatterplot-options');
+            if (this.value === 'scatterplot') {
+                scatterplotOptions.style.display = 'block';
+            } else {
+                scatterplotOptions.style.display = 'none';
+            }
         });
     </script>
 </body>
