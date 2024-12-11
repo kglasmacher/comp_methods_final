@@ -1,66 +1,85 @@
 from flask import Flask, request, jsonify, render_template
 import pandas as pd
-import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Use a non-GUI backend
 import matplotlib.pyplot as plt
 import io
 import base64
 
 app = Flask(__name__)
 
-data = pd.read_csv('data/dataset.csv') # load preprocessed dataframe
+# Load dataset
+data = pd.read_csv('data/clean_data.csv')
+data.dropna(how='all', inplace=True)
 
-# API routes
-@app.route('/')
-def home():
-    #return "<h1>Flask App is Running</h1>" # for debugging
-    return render_template('index.html') # front end html file
-
-@app.route('/analyze', methods=['POST'])
-def analyze():
-    # Parse request data
-    request_data = request.get_json()
-    analysis_type = request_data.get('analysis_type')
-    parameter = request_data.get('parameter', None)
-
-    # Perform analysis based on type
-    if analysis_type == 'summary':
-        result = data.describe().to_dict()
-        return jsonify(result)
-
-    elif analysis_type == 'scatter_plot':
-        x_column = request_data.get('x_column')
-        y_column = request_data.get('y_column')
-        img = create_scatter_plot(data, x_column, y_column)
-        return jsonify({'image': img})
-
-    elif analysis_type == 'filter':
-        threshold = float(parameter)
-        filtered_data = data[data['some_column'] > threshold]
-        result = filtered_data.to_dict(orient='records')
-        return jsonify(result)
-
-    return jsonify({'error': 'Invalid analysis type'}), 400
-
-def create_scatter_plot(df, x_column, y_column):
+# Plotting function
+def generate_plot(x, y, title="Scatter Plot", xlabel="X-axis", ylabel="Y-axis"):
     plt.figure(figsize=(8, 6))
-    plt.scatter(df[x_column], df[y_column], alpha=0.6)
-    plt.xlabel(x_column)
-    plt.ylabel(y_column)
-    plt.title(f'Scatter Plot: {x_column} vs {y_column}')
-    
-    # Save the plot to a BytesIO object
+    plt.scatter(x, y, color='b')
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.grid(True)
+
+    # Save to buffer
     buf = io.BytesIO()
     plt.savefig(buf, format='png')
     buf.seek(0)
-    img_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+    image_base64 = base64.b64encode(buf.read()).decode('utf-8')
     buf.close()
-    plt.close()
-    return img_base64
+    plt.close()  # Prevent memory leak
+    return image_base64
 
-@app.route('/columns', methods=['GET'])
-def get_columns():
-    columns = data.columns.tolist()
-    return jsonify(columns)
+
+
+
+
+@app.route('/')
+def index():
+    # Get column names from the data
+    columns = data.columns.tolist()  # List of column names
+    return render_template('index.html', columns=columns)
+
+
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    try:
+        request_data = request.get_json()
+        print(f"Request data received: {request_data}")  # For debugging
+
+        analysis_type = request_data.get('analysis_type')
+
+        if analysis_type == 'summary':
+            column = request_data.get('column')
+            if not column:
+                return jsonify({"error": "Column not provided"}), 400
+
+            # Check if the column exists in the DataFrame
+            if column not in data.columns:
+                return jsonify({"error": f"Column '{column}' does not exist in the dataset"}), 400
+            
+            # Calculate summary statistics
+            summary_stats = data[column].describe()
+            summary_stats_dict = summary_stats.to_dict()
+
+            # Return the summary stats as JSON
+            return jsonify(summary_stats_dict)
+
+        elif analysis_type == 'scatter_plot':
+            x_col = request_data.get('x_column')
+            y_col = request_data.get('y_column')
+            if x_col not in data.columns or y_col not in data.columns:
+                raise ValueError(f"Invalid columns: {x_col}, {y_col}")
+            image = generate_plot(data[x_col], data[y_col])
+            return jsonify({"image": image})
+
+        else:
+            return jsonify({"error": "Analysis type not implemented"}), 400
+
+    except Exception as e:
+        print(f"Error: {e}")  # Log to console
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True)
