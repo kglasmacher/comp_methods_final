@@ -18,10 +18,12 @@
             <option value="scatterplot">Scatterplot</option>
         </select>
         
-        <label for="column">Select a column:</label>
-        <select id="column" name="column">
-            <!-- This will be populated dynamically with column names -->
-        </select>
+        <div id="summary-options">
+            <label for="column">Select Variable for Analysis:</label>
+            <select id="column" name="column">
+                <!-- This will be populated dynamically with column names -->
+            </select>
+        </div>
         
         <div id="scatterplot-options" style="display:none;">
             <label for="x-column">Select X Column:</label>
@@ -132,10 +134,14 @@
 
         // Show scatterplot-specific options when the scatterplot analysis type is selected
         document.getElementById('analysis-type').addEventListener('change', function() {
+            const summaryOptions = document.getElementById('summary-options');
             const scatterplotOptions = document.getElementById('scatterplot-options');
+
             if (this.value === 'scatterplot') {
+                summaryOptions.style.display = 'none';
                 scatterplotOptions.style.display = 'block';
             } else {
+                summaryOptions.style.display = 'block';
                 scatterplotOptions.style.display = 'none';
             }
         });
