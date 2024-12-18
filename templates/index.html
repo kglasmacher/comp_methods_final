@@ -46,9 +46,59 @@
         
         <button type="submit">Analyze</button>
     </form>
-
+    
     <!-- Where the summary statistics or scatterplot will be displayed -->
     <div id="analysis-results"></div>
+
+
+
+
+
+    <button id="correlation-heatmap-btn">Show Correlation Heatmap</button>
+    <div id="correlation-heatmap-results"></div>
+
+
+
+    <h2>k-Nearest Neighbors Prediction</h2>
+    <form id="knn-form">
+        <label for="target-column">Select Target Variable:</label>
+        <select id="target-column" name="target-column">
+            <option value="diet_supplements_before_lab">Dietary Supplements</option>
+            <option value="alcohol_before_lab">Alcohol Use</option>
+            <option value="gum_before_lab">Gum Use</option>
+        </select>
+        <br>
+    
+        <label for="k-value">Enter k (Number of Neighbors):</label>
+        <input type="number" id="k-value" name="k-value" min="1" value="3">
+        <br>
+    
+        <label for="features">Select Features (Ctrl+Click to select multiple):</label>
+        <select id="features" name="features" multiple>
+            {% for col in columns %}
+            <option value="{{ col }}">{{ col }}</option>
+            {% endfor %}
+        </select>
+        <br>
+        <div id="feature-inputs"></div> <!-- Placeholder for dynamic feature inputs -->
+        <br>
+    </form>
+
+    <div id="knn-results"></div>
+
+
+
+    <!-- Modal for Feature Input -->
+    <div id="feature-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <h2>Enter Values for Selected Features</h2>
+            <form id="modal-form">
+                <div id="modal-inputs"></div> <!-- Placeholder for dynamic inputs -->
+                <button type="submit">Predict</button>
+            </form>
+        </div>
+    </div>
 
     <!-- Include the JavaScript file -->
     <script>
@@ -182,6 +232,181 @@
                 summaryOptions.style.display = 'block';
                 scatterplotOptions.style.display = 'none';
             }
+        });
+
+        // Modal control functions
+        document.getElementById('features').addEventListener('change', function() {
+            const selectedFeatures = Array.from(this.selectedOptions).map(option => option.value);
+            const modalInputsDiv = document.getElementById('modal-inputs');
+
+            // Clear previous inputs
+            modalInputsDiv.innerHTML = '';
+
+            // Create input fields for each selected feature
+            selectedFeatures.forEach(feature => {
+                const label = document.createElement('label');
+                label.textContent = `Enter value for ${feature}: `;
+                label.htmlFor = `feature-${feature}`;
+
+                const input = document.createElement('input');
+                input.type = 'number'; // Assume numerical input for simplicity
+                input.id = `feature-${feature}`;
+                input.name = feature;
+
+                modalInputsDiv.appendChild(label);
+                modalInputsDiv.appendChild(input);
+                modalInputsDiv.appendChild(document.createElement('br'));
+            });
+
+            // Show the modal
+            openModal();
+        });
+
+        // Function to open the modal
+        function openModal() {
+            document.getElementById('feature-modal').style.display = 'block';
+        }
+
+        // Function to close the modal
+        function closeModal() {
+            document.getElementById('feature-modal').style.display = 'none';
+        }
+
+        
+        // Handle form submission from the modal
+        document.getElementById('modal-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            const selectedFeatures = Array.from(document.getElementById('features').selectedOptions).map(option => option.value);
+            const featureValues = selectedFeatures.map(feature => {
+                const input = document.getElementById(`feature-${feature}`);
+                return parseFloat(input.value); // Convert to float for numerical features
+            });
+
+            // Validate inputs: Check if all feature values are valid numbers
+            if (featureValues.some(value => isNaN(value) || value === '')) {
+                alert('Please enter valid numerical values for all selected features.');
+                return;  // Stop further execution if validation fails
+            }
+
+            // Close the modal after submitting
+            closeModal();
+
+            // Now you can send the feature values to the server for prediction
+            const requestData = {
+                target_column: document.getElementById('target-column').value,
+                k: parseInt(document.getElementById('k-value').value),
+                features: selectedFeatures,
+                feature_values: featureValues
+            };
+
+            // Send POST request to backend (already in your existing code)
+            fetch('/knn_predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                const resultDiv = document.getElementById('knn-results');
+                resultDiv.innerHTML = ''; // Clear previous results
+
+                if (data.error) {
+                    resultDiv.innerHTML = `<p style="color: red;">Error: ${data.error}</p>`;
+                } else {
+                    resultDiv.innerHTML = `<p><strong>Prediction:</strong> ${data.prediction}</p>`;
+                    resultDiv.innerHTML += `<p><strong>Class Probabilities:</strong></p><ul>`;
+                    for (const [cls, prob] of Object.entries(data.probabilities)) {
+                        resultDiv.innerHTML += `<li>Class ${cls}: ${prob}</li>`;
+                    }
+                    resultDiv.innerHTML += `</ul>`;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while processing your request.');
+            });
+        });
+
+        document.getElementById('knn-form').addEventListener('submit', function(event) {
+            event.preventDefault();  // Prevent the form from submitting automatically
+
+            // Get selected features
+            const selectedFeatures = Array.from(document.getElementById('features').selectedOptions).map(option => option.value);
+            const featureValues = selectedFeatures.map(feature => {
+                const input = document.getElementById(`feature-${feature}`);
+                const value = input.value.trim();  // Ensure to remove any accidental spaces
+                return parseFloat(value);  // Parse the value to float
+            });
+
+            // Validate feature values: Ensure all values are valid numbers (not NaN)
+            if (featureValues.some(value => isNaN(value) || value === '')) {
+                alert('Please enter valid numerical values for all selected features.');
+                return;  // Stop if any value is invalid
+            }
+
+            // If the input is valid, proceed with submitting the form
+            const requestData = {
+                target_column: document.getElementById('target-column').value,
+                k: parseInt(document.getElementById('k-value').value),
+                features: selectedFeatures,
+                feature_values: featureValues
+            };
+
+            // Send request to backend
+            fetch('/knn_predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                const resultDiv = document.getElementById('knn-results');
+                resultDiv.innerHTML = '';  // Clear any previous results
+
+                if (data.error) {
+                    resultDiv.innerHTML = `<p style="color: red;">Error: ${data.error}</p>`;
+                } else {
+                    resultDiv.innerHTML = `<p><strong>Prediction:</strong> ${data.prediction}</p>`;
+                    resultDiv.innerHTML += `<p><strong>Class Probabilities:</strong></p><ul>`;
+                    for (const [cls, prob] of Object.entries(data.probabilities)) {
+                        resultDiv.innerHTML += `<li>Class ${cls}: ${prob}</li>`;
+                    }
+                    resultDiv.innerHTML += `</ul>`;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while processing your request.');
+            });
+        });
+
+         // Event listener for the correlation heatmap button
+        document.getElementById('correlation-heatmap-btn').addEventListener('click', function () {
+            fetch('/correlation_heatmap', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            })
+                .then((response) => response.json())
+                .then((data) => {
+                    const resultDiv = document.getElementById('correlation-heatmap-results');
+                    resultDiv.innerHTML = ''; // Clear previous results
+
+                    if (data.error) {
+                        resultDiv.innerHTML = `<p style="color: red;">Error: ${data.error}</p>`;
+                        return;
+                    }
+
+                    // Display the heatmap image
+                    const img = document.createElement('img');
+                    img.src = `data:image/png;base64,${data.heatmap}`;
+                    img.alt = 'Correlation Heatmap';
+                    resultDiv.appendChild(img);
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                    alert('Failed to fetch correlation heatmap.');
+                });
         });
     </script>
 </body>

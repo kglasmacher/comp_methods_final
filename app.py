@@ -6,7 +6,16 @@ import matplotlib.pyplot as plt
 import io
 import base64
 import numpy as np
+import seaborn as sns
 from sklearn.linear_model import LinearRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from scipy.stats import pointbiserialr, chi2_contingency
+import dython
+from dython.nominal import associations
+
+
 
 app = Flask(__name__, static_folder='static')
 
@@ -40,10 +49,12 @@ def generate_plot(x, y, title="Scatter Plot", xlabel="X-axis", ylabel="Y-axis"):
 def index():
     numerical_columns = [col for col in data.columns if pd.api.types.is_numeric_dtype(data[col])]
     categorical_columns = [col for col in data.columns if pd.api.types.is_categorical_dtype(data[col]) or pd.api.types.is_object_dtype(data[col])]
+    columns = data.columns.tolist()
 
     return render_template('index.html', 
                            numerical_columns=numerical_columns, 
-                           categorical_columns=categorical_columns)
+                           categorical_columns=categorical_columns,
+                           columns=columns)
 
 
 @app.route('/analyze', methods=['POST'])
@@ -193,6 +204,70 @@ def analyze():
     except Exception as e:
         print(f"Error: {e}")  # Log to console
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/knn_predict', methods=['POST'])
+def knn_predict():
+    data = request.get_json()  # Get the data from the frontend
+
+    # Extract the relevant fields
+    target_column = data.get('target_column')
+    k_value = data.get('k')
+    features = data.get('features')
+    feature_values = data.get('feature_values')
+
+    # Validation: Ensure no NaN or empty values
+    if not target_column or not isinstance(k_value, int) or k_value <= 0:
+        return jsonify({"error": "Invalid target column or k value"}), 400
+
+    if not features or not feature_values or len(features) != len(feature_values):
+        return jsonify({"error": "Features and their values must be provided correctly"}), 400
+
+    # Check for NaN values in feature values
+    if any(np.isnan(value) for value in feature_values):
+        return jsonify({"error": "Feature values contain invalid (NaN) values"}), 400
+
+    # Perform the prediction logic here (omitted for simplicity)
+    prediction = "Some Prediction"  # Replace with actual model prediction logic
+    class_probabilities = {"Class 1": 0.75, "Class 2": 0.25}  # Example probabilities
+
+    return jsonify({
+        "prediction": prediction,
+        "probabilities": class_probabilities
+    })
+    
+
+    
+
+@app.route('/correlation_heatmap', methods=['POST'])
+def correlation_heatmap():
+    try:
+        # Select only numerical columns
+        numerical_data = data.select_dtypes(include=['number'])
+
+        # Compute the correlation matrix
+        corr_matrix = numerical_data.corr()
+
+        # Create a heatmap without annotations
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(corr_matrix, annot=False, cmap='coolwarm', linewidths=0.5)
+        plt.title('Correlation Matrix Heatmap')
+
+        # Save the heatmap to a BytesIO object
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight')
+        buf.seek(0)
+        plt.close()
+
+        # Encode the image as base64
+        base64_image = base64.b64encode(buf.read()).decode('utf-8')
+
+        return jsonify({'heatmap': base64_image})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
+
 
 
 if __name__ == '__main__':
