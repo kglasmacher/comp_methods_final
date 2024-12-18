@@ -38,9 +38,12 @@ def generate_plot(x, y, title="Scatter Plot", xlabel="X-axis", ylabel="Y-axis"):
 
 @app.route('/')
 def index():
-    # Get column names from the data
-    columns = data.columns.tolist()  # List of column names
-    return render_template('index.html', columns=columns)
+    numerical_columns = [col for col in data.columns if pd.api.types.is_numeric_dtype(data[col])]
+    categorical_columns = [col for col in data.columns if pd.api.types.is_categorical_dtype(data[col]) or pd.api.types.is_object_dtype(data[col])]
+
+    return render_template('index.html', 
+                           numerical_columns=numerical_columns, 
+                           categorical_columns=categorical_columns)
 
 
 @app.route('/analyze', methods=['POST'])
@@ -90,35 +93,82 @@ def analyze():
         elif analysis_type == 'scatterplot':
             x_column = request_data.get('x_column')
             y_column = request_data.get('y_column')
+            color_by = request_data.get('color_by')  # Optional
 
-            if x_column is None or y_column is None:
-                return jsonify({'error': 'Both x and y columns must be selected for the scatterplot'}), 400
-            
-            # Check if columns are numerical
+            # Validate columns
+            if not x_column or not y_column:
+                return jsonify({'error': 'Both x and y columns must be selected'}), 400
+            if x_column not in data.columns or y_column not in data.columns:
+                return jsonify({'error': 'Selected columns do not exist in the dataset'}), 400
+
+            # Ensure x and y are numerical
             if not pd.api.types.is_numeric_dtype(data[x_column]) or not pd.api.types.is_numeric_dtype(data[y_column]):
-                return jsonify({'error': 'Linear regression requires both columns to be numerical'}), 400
+                return jsonify({'error': 'x and y columns must be numerical'}), 400
 
-            # Prepare the data for regression
-            x = data[x_column].dropna().values.reshape(-1, 1)
-            y = data[y_column].dropna().values
+            # Drop NaNs for selected columns
+            scatter_data = data[[x_column, y_column, color_by]].dropna() if color_by else data[[x_column, y_column]].dropna()
 
-            # Ensure matching lengths after dropping NaNs
-            valid_idx = ~np.isnan(x.flatten()) & ~np.isnan(y)
-            x = x[valid_idx]
-            y = y[valid_idx]
+            # Initialize plot
+            plt.figure(figsize=(10, 6))
 
-            # Perform linear regression
-            model = LinearRegression()
-            model.fit(x, y)
-            y_pred = model.predict(x)
-            slope = model.coef_[0]
-            intercept = model.intercept_
-            r_squared = model.score(x, y)
+            # Handle coloring by a categorical variable
+            if color_by and color_by in data.columns:
+                # Ensure color_by is categorical
+                if not pd.api.types.is_categorical_dtype(data[color_by]) and not pd.api.types.is_object_dtype(data[color_by]):
+                    return jsonify({'error': 'Color-by column must be categorical'}), 400
 
-            # Generate scatterplot with regression line
-            plt.figure(figsize=(8, 6))
-            plt.scatter(x, y, color='blue', label='Data')
-            plt.plot(x, y_pred, color='red', label=f'Regression Line (y = {slope:.2f}x + {intercept:.2f})')
+                # Group by categories and plot
+                unique_categories = scatter_data[color_by].unique()
+                regressions = {}
+
+                for category in unique_categories:
+                    subset = scatter_data[scatter_data[color_by] == category]
+                    x = subset[x_column].values.reshape(-1, 1)
+                    y = subset[y_column].values
+
+                    # Scatter points
+                    plt.scatter(x, y, label=f'{category}', alpha=0.7)
+
+                    # Linear regression for each category
+                    model = LinearRegression()
+                    model.fit(x, y)
+                    y_pred = model.predict(x)
+                    slope = model.coef_[0]
+                    intercept = model.intercept_
+                    regressions[category] = {
+                        'slope': slope,
+                        'intercept': intercept,
+                        'equation': f'y = {slope:.2f}x + {intercept:.2f}'
+                    }
+
+                    # Plot regression line
+                    plt.plot(x, y_pred, label=f'{category} (y = {slope:.2f}x + {intercept:.2f})')
+
+                plt.legend()
+            else:
+                # Single scatterplot and regression
+                x = scatter_data[x_column].values.reshape(-1, 1)
+                y = scatter_data[y_column].values
+
+                plt.scatter(x, y, color='blue', label='Data', alpha=0.7)
+
+                # Linear regression
+                model = LinearRegression()
+                model.fit(x, y)
+                y_pred = model.predict(x)
+                slope = model.coef_[0]
+                intercept = model.intercept_
+
+                plt.plot(x, y_pred, color='red', label=f'Regression (y = {slope:.2f}x + {intercept:.2f})')
+                regressions = {
+                    'overall': {
+                        'slope': slope,
+                        'intercept': intercept,
+                        'equation': f'y = {slope:.2f}x + {intercept:.2f}'
+                    }
+                }
+
+            # Finalize plot
             plt.title(f'{x_column} vs {y_column}')
             plt.xlabel(x_column)
             plt.ylabel(y_column)
@@ -132,15 +182,11 @@ def analyze():
             buf.close()
             plt.close()
 
-            # Return results including regression details
             return jsonify({
-                'x_label': x_column,
-                'y_label': y_column,
                 'plot': image_base64,
-                'equation': f'y = {slope:.2f}x + {intercept:.2f}',
-                'r_squared': r_squared
+                'regressions': regressions
             })
-
+        
         else:
             return jsonify({"error": "Analysis type not implemented"}), 400
 

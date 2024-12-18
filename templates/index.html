@@ -36,6 +36,12 @@
             <select id="y-column" name="y-column">
                 <!-- This will be populated dynamically -->
             </select>
+
+            <label for="color-by">Color By (Optional):</label>
+            <select id="color-by" name="color-by">
+                <option value="">None</option>
+                <!-- This will be populated dynamically with categorical variables -->
+            </select>
         </div>
         
         <button type="submit">Analyze</button>
@@ -47,21 +53,30 @@
     <!-- Include the JavaScript file -->
     <script>
         window.onload = function() {
-            // Get column names from the Flask backend and populate the dropdowns
-            const columns = {{ columns | tojson }};  // This is passed from Flask to the frontend
+            const numericalColumns = {{ numerical_columns | tojson }};
+            const categoricalColumns = {{ categorical_columns | tojson }};
 
+            // Populate numerical column dropdowns
             const columnSelect = document.getElementById('column');
             const xColumnSelect = document.getElementById('x-column');
             const yColumnSelect = document.getElementById('y-column');
-            
-            // Create option elements for each column and add them to the dropdown
-            columns.forEach(function(column) {
+
+            numericalColumns.forEach(function(column) {
                 const option = document.createElement('option');
                 option.value = column;
                 option.textContent = column;
-                columnSelect.appendChild(option);
+                columnSelect.appendChild(option.cloneNode(true));
                 xColumnSelect.appendChild(option.cloneNode(true));
                 yColumnSelect.appendChild(option.cloneNode(true));
+            });
+
+            // Populate categorical column dropdown
+            const colorBySelect = document.getElementById('color-by');
+            categoricalColumns.forEach(function(column) {
+                const option = document.createElement('option');
+                option.value = column;
+                option.textContent = column;
+                colorBySelect.appendChild(option);
             });
         };
 
@@ -70,18 +85,34 @@
 
             const analysisType = document.getElementById('analysis-type').value;
             const column = document.getElementById('column').value;
-            const xColumn = document.getElementById('x-column').value;
-            const yColumn = document.getElementById('y-column').value;
+            
+            const requestData = { analysis_type: analysisType };
 
-            // Prepare the request data as an object
-            const requestData = {
-                analysis_type: analysisType,
-                column: column
-            };
+            // Include column for summary statistics
+            if (analysisType === 'summary') {
+                if (!column) {
+                    alert('Please select a column for summary statistics');
+                    return;
+                }
+                requestData.column = column;
+            }
 
+            // Scatterplot logic remains unchanged
             if (analysisType === 'scatterplot') {
+                const xColumn = document.getElementById('x-column').value;
+                const yColumn = document.getElementById('y-column').value;
+                const colorBy = document.getElementById('color-by').value;
+
+                if (!xColumn || !yColumn) {
+                    alert('Please select both X and Y columns for scatterplot');
+                    return;
+                }
+
                 requestData.x_column = xColumn;
                 requestData.y_column = yColumn;
+                if (colorBy) {
+                    requestData.color_by = colorBy;
+                }
             }
 
             // Send the POST request to the Flask server
@@ -119,28 +150,17 @@
                         }
                     }
                     else if (analysisType === 'scatterplot') {
-                        const trace = {
-                            x: data.x,
-                            y: data.y,
-                            mode: 'markers',
-                            type: 'scatter',
-                            name: 'Data Points'
-                        };
-
-                        const layout = {
-                            title: `${data.x_label} vs ${data.y_label}`,
-                            xaxis: { title: data.x_label },
-                            yaxis: { title: data.y_label }
-                        };
-
                         const img = document.createElement('img');
                         img.src = `data:image/png;base64,${data.plot}`;
-                        img.alt = 'Scatterplot with Regression Line';
+                        img.alt = 'Scatterplot';
                         resultDiv.appendChild(img);
 
-                        // Add regression details to the output
-                        resultDiv.innerHTML += `<p><strong>Regression Equation:</strong> ${data.equation}</p>`;
-                        resultDiv.innerHTML += `<p><strong>R²:</strong> ${data.r_squared.toFixed(2)}</p>`;
+                        if (data.regressions) {
+                            for (const category in data.regressions) {
+                                const regression = data.regressions[category];
+                                resultDiv.innerHTML += `<p><strong>${category} Regression:</strong> ${regression.equation}</p>`;
+                            }
+                        }
                     }
                 }
             })
