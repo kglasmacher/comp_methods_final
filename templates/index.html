@@ -328,58 +328,59 @@
             });
         });
 
-        document.getElementById('knn-form').addEventListener('submit', function(event) {
-            event.preventDefault();  // Prevent the form from submitting automatically
+        document.getElementById('knn-form').addEventListener('submit', function (event) {
+            event.preventDefault();
 
-            // Get selected features
-            const selectedFeatures = Array.from(document.getElementById('features').selectedOptions).map(option => option.value);
-            const featureValues = selectedFeatures.map(feature => {
+            const targetColumn = document.getElementById('target-column').value;
+            const kValue = parseInt(document.getElementById('k-value').value);
+            const selectedFeatures = Array.from(document.getElementById('features').selectedOptions).map(
+                (option) => option.value
+            );
+            const featureValues = selectedFeatures.map((feature) => {
                 const input = document.getElementById(`feature-${feature}`);
-                const value = input.value.trim();  // Ensure to remove any accidental spaces
-                return parseFloat(value);  // Parse the value to float
+                return parseFloat(input.value);
             });
 
-            // Validate feature values: Ensure all values are valid numbers (not NaN)
-            if (featureValues.some(value => isNaN(value) || value === '')) {
-                alert('Please enter valid numerical values for all selected features.');
-                return;  // Stop if any value is invalid
+            // Validate inputs
+            if (featureValues.some((value) => isNaN(value))) {
+                alert('Please provide valid numerical values for all selected features.');
+                return;
             }
 
-            // If the input is valid, proceed with submitting the form
             const requestData = {
-                target_column: document.getElementById('target-column').value,
-                k: parseInt(document.getElementById('k-value').value),
+                target_column: targetColumn,
+                k: kValue,
                 features: selectedFeatures,
-                feature_values: featureValues
+                feature_values: featureValues,
             };
 
-            // Send request to backend
             fetch('/knn_predict', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestData)
+                body: JSON.stringify(requestData),
             })
-            .then(response => response.json())
-            .then(data => {
-                const resultDiv = document.getElementById('knn-results');
-                resultDiv.innerHTML = '';  // Clear any previous results
+                .then((response) => response.json())
+                .then((data) => {
+                    const resultDiv = document.getElementById('knn-results');
+                    resultDiv.innerHTML = ''; // Clear previous results
 
-                if (data.error) {
-                    resultDiv.innerHTML = `<p style="color: red;">Error: ${data.error}</p>`;
-                } else {
-                    resultDiv.innerHTML = `<p><strong>Prediction:</strong> ${data.prediction}</p>`;
-                    resultDiv.innerHTML += `<p><strong>Class Probabilities:</strong></p><ul>`;
-                    for (const [cls, prob] of Object.entries(data.probabilities)) {
-                        resultDiv.innerHTML += `<li>Class ${cls}: ${prob}</li>`;
+                    if (data.error) {
+                        resultDiv.innerHTML = `<p style="color: red;">Error: ${data.error}</p>`;
+                    } else {
+                        resultDiv.innerHTML = `<p><strong>Prediction:</strong> ${data.prediction}</p>`;
+                        resultDiv.innerHTML += `<p><strong>Class Probabilities:</strong></p><ul>`;
+                        for (const [cls, prob] of Object.entries(data.probabilities)) {
+                            resultDiv.innerHTML += `<li>Class ${cls}: ${prob}</li>`;
+                        }
+                        resultDiv.innerHTML += `</ul>`;
                     }
-                    resultDiv.innerHTML += `</ul>`;
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred while processing your request.');
-            });
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                    alert('An error occurred while processing your request.');
+                });
         });
+
 
          // Event listener for the correlation heatmap button
         document.getElementById('correlation-heatmap-btn').addEventListener('click', function () {

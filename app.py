@@ -208,33 +208,56 @@ def analyze():
 
 @app.route('/knn_predict', methods=['POST'])
 def knn_predict():
-    data = request.get_json()  # Get the data from the frontend
+    try:
+        # Parse input data from the request
+        request_data = request.get_json()
+        target_column = request_data.get('target_column')
+        k_value = request_data.get('k')
+        features = request_data.get('features')
+        feature_values = request_data.get('feature_values')
 
-    # Extract the relevant fields
-    target_column = data.get('target_column')
-    k_value = data.get('k')
-    features = data.get('features')
-    feature_values = data.get('feature_values')
+        # Validate inputs
+        if not target_column or not isinstance(k_value, int) or k_value <= 0:
+            return jsonify({"error": "Invalid target column or k value"}), 400
+        if not features or not feature_values or len(features) != len(feature_values):
+            return jsonify({"error": "Features and their values must be provided correctly"}), 400
 
-    # Validation: Ensure no NaN or empty values
-    if not target_column or not isinstance(k_value, int) or k_value <= 0:
-        return jsonify({"error": "Invalid target column or k value"}), 400
+        # Prepare data
+        X = data[features].dropna()
+        y = data[target_column].dropna()
+        X, y = X.align(y, join='inner', axis=0)  # Ensure alignment after dropping NaNs
 
-    if not features or not feature_values or len(features) != len(feature_values):
-        return jsonify({"error": "Features and their values must be provided correctly"}), 400
+        # Convert input feature values to a numpy array
+        input_values = np.array(feature_values).reshape(1, -1)
 
-    # Check for NaN values in feature values
-    if any(np.isnan(value) for value in feature_values):
-        return jsonify({"error": "Feature values contain invalid (NaN) values"}), 400
+        # Check for NaN in input values
+        if np.isnan(input_values).any():
+            return jsonify({"error": "Input feature values contain NaN. Please provide valid numbers."}), 400
 
-    # Perform the prediction logic here (omitted for simplicity)
-    prediction = "Some Prediction"  # Replace with actual model prediction logic
-    class_probabilities = {"Class 1": 0.75, "Class 2": 0.25}  # Example probabilities
+        # Scale features
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+        input_values_scaled = scaler.transform(input_values)
 
-    return jsonify({
-        "prediction": prediction,
-        "probabilities": class_probabilities
-    })
+        # Train the KNN model
+        knn = KNeighborsClassifier(n_neighbors=k_value)
+        knn.fit(X_scaled, y)
+
+        # Make predictions
+        prediction = knn.predict(input_values_scaled)[0]
+        probabilities = knn.predict_proba(input_values_scaled)[0]
+
+        # Format probabilities for each class
+        class_probabilities = {str(cls): round(prob, 3) for cls, prob in zip(knn.classes_, probabilities)}
+
+        return jsonify({
+            "prediction": str(prediction),
+            "probabilities": class_probabilities
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
     
 
     
