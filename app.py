@@ -47,9 +47,9 @@ def generate_plot(x, y, title="Scatter Plot", xlabel="X-axis", ylabel="Y-axis"):
 
 @app.route('/')
 def index():
-    numerical_columns = [col for col in data.columns if pd.api.types.is_numeric_dtype(data[col])]
+    numerical_columns = [col for col in data.columns.drop('respondent') if pd.api.types.is_numeric_dtype(data[col])]
     categorical_columns = [col for col in data.columns if pd.api.types.is_categorical_dtype(data[col]) or pd.api.types.is_object_dtype(data[col])]
-    columns = data.columns.tolist()
+    columns = data.columns.drop('respondent').tolist()
 
     return render_template('index.html', 
                            numerical_columns=numerical_columns, 
