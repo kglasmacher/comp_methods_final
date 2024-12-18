@@ -5,8 +5,10 @@ matplotlib.use('Agg')  # Use a non-GUI backend
 import matplotlib.pyplot as plt
 import io
 import base64
+import numpy as np
+from sklearn.linear_model import LinearRegression
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 
 # Load dataset
 data = pd.read_csv('data/clean_data.csv')
@@ -45,8 +47,6 @@ def index():
 def analyze():
     try:
         request_data = request.get_json()
-        print(f"Request data received: {request_data}")  # For debugging
-
         analysis_type = request_data.get('analysis_type')
 
         if analysis_type == 'summary':
@@ -54,7 +54,6 @@ def analyze():
             if not column:
                 return jsonify({"error": "Column not provided"}), 400
 
-            # Check if the column exists in the DataFrame
             if column not in data.columns:
                 return jsonify({"error": f"Column '{column}' does not exist in the dataset"}), 400
             
@@ -62,26 +61,85 @@ def analyze():
             summary_stats = data[column].describe()
             summary_stats_dict = summary_stats.to_dict()
 
-            # Return the summary stats as JSON
-            return jsonify(summary_stats_dict)
+            # Generate plots
+            if pd.api.types.is_numeric_dtype(data[column]):
+                plt.figure(figsize=(8, 6))
+                plt.hist(data[column].dropna(), bins=10, color='blue', alpha=0.7)
+                plt.title(f"Histogram of {column}")
+                plt.xlabel(column)
+                plt.ylabel("Frequency")
+            else:
+                plt.figure(figsize=(8, 6))
+                data[column].value_counts().plot(kind='bar', color='blue', alpha=0.7)
+                plt.title(f"Bar Chart of {column}")
+                plt.xlabel(column)
+                plt.ylabel("Count")
 
+            # Save plot to base64
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png')
+            buf.seek(0)
+            image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+            buf.close()
+            plt.close()
+
+            # Include plot in the response
+            summary_stats_dict['plot'] = image_base64
+            return jsonify(summary_stats_dict)
+        
         elif analysis_type == 'scatterplot':
-            # Get the x and y columns for the scatterplot
             x_column = request_data.get('x_column')
             y_column = request_data.get('y_column')
 
             if x_column is None or y_column is None:
                 return jsonify({'error': 'Both x and y columns must be selected for the scatterplot'}), 400
             
-            # Prepare scatterplot data
-            scatter_data = {
-                'x': data[x_column].tolist(),
-                'y': data[y_column].tolist(),
-                'x_label': x_column,
-                'y_label': y_column
-            }
+            # Check if columns are numerical
+            if not pd.api.types.is_numeric_dtype(data[x_column]) or not pd.api.types.is_numeric_dtype(data[y_column]):
+                return jsonify({'error': 'Linear regression requires both columns to be numerical'}), 400
 
-            return jsonify(scatter_data)
+            # Prepare the data for regression
+            x = data[x_column].dropna().values.reshape(-1, 1)
+            y = data[y_column].dropna().values
+
+            # Ensure matching lengths after dropping NaNs
+            valid_idx = ~np.isnan(x.flatten()) & ~np.isnan(y)
+            x = x[valid_idx]
+            y = y[valid_idx]
+
+            # Perform linear regression
+            model = LinearRegression()
+            model.fit(x, y)
+            y_pred = model.predict(x)
+            slope = model.coef_[0]
+            intercept = model.intercept_
+            r_squared = model.score(x, y)
+
+            # Generate scatterplot with regression line
+            plt.figure(figsize=(8, 6))
+            plt.scatter(x, y, color='blue', label='Data')
+            plt.plot(x, y_pred, color='red', label=f'Regression Line (y = {slope:.2f}x + {intercept:.2f})')
+            plt.title(f'{x_column} vs {y_column}')
+            plt.xlabel(x_column)
+            plt.ylabel(y_column)
+            plt.legend()
+
+            # Save plot to base64
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png')
+            buf.seek(0)
+            image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+            buf.close()
+            plt.close()
+
+            # Return results including regression details
+            return jsonify({
+                'x_label': x_column,
+                'y_label': y_column,
+                'plot': image_base64,
+                'equation': f'y = {slope:.2f}x + {intercept:.2f}',
+                'r_squared': r_squared
+            })
 
         else:
             return jsonify({"error": "Analysis type not implemented"}), 400
