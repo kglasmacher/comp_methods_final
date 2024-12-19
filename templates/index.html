@@ -191,9 +191,19 @@
         window.onload = function() {
             const numericalColumns = {{ numerical_columns | tojson }};
             const categoricalColumns = {{ categorical_columns | tojson }};
+            const allColumns = {{ columns | tojson }};
+
+            // Populate all column dropdowns
+            const columnSelect = document.getElementById('column');
+
+            allColumns.forEach(function(column) {
+                const option = document.createElement('option');
+                option.value = column;
+                option.textContent = column;
+                columnSelect.appendChild(option.cloneNode(true));
+            });
 
             // Populate numerical column dropdowns
-            const columnSelect = document.getElementById('column');
             const xColumnSelect = document.getElementById('x-column');
             const yColumnSelect = document.getElementById('y-column');
 
@@ -208,6 +218,7 @@
 
             // Populate categorical column dropdown
             const colorBySelect = document.getElementById('color-by');
+
             categoricalColumns.forEach(function(column) {
                 const option = document.createElement('option');
                 option.value = column;
