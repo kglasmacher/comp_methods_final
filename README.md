@@ -1,3 +1,3 @@
 # comp_methods_final
 
-see report.pdf for final report
+see 'CBB 634 Final Report.pdf' for final report
